@@ -237,8 +237,12 @@ class _AudioHub:
         kwargs = dict(samplerate=rate, channels=1, callback=self._on_audio)
         if idx is not None and idx >= 0:
             kwargs["device"] = idx
-        self._stream = sd.InputStream(**kwargs)
-        self._stream.start()
+        try:
+            self._stream = sd.InputStream(**kwargs)
+            self._stream.start()
+        except Exception as e:
+            self._stream = None
+            raise RuntimeError(f"No audio input device available: {e}") from e
 
     def _maybe_stop(self):
         """Schedule stream shutdown if no consumers remain. Called under lock."""

@@ -109,9 +109,16 @@ if CONFIG['ACCESS']['webui_enabled']:
         queue_message(f"WARNING: ChatUI module not available: {e}")
 
 # === Always Load These ===
-from modules.module_battery import BatteryModule
 from modules.module_cputemp import CPUTempModule
 from modules import module_servoctl
+
+BATTERY_MODULE_AVAILABLE = False
+try:
+    from modules.module_battery import BatteryModule
+    BATTERY_MODULE_AVAILABLE = True
+except Exception as e:
+    queue_message(f"WARNING: module_battery not available (no INA260 hardware): {type(e).__name__}: {e}")
+    BatteryModule = None
 
 # === Conditional Bluetooth Controller ===
 BT_AVAILABLE = False
@@ -281,7 +288,7 @@ if __name__ == "__main__":
     shutdown_event = threading.Event()
 
     # Battery module (only if enabled in config)
-    if CONFIG['BATTERY'].get('battery_enabled', False):
+    if CONFIG['BATTERY'].get('battery_enabled', False) and BATTERY_MODULE_AVAILABLE:
         battery = BatteryModule()
         battery.start()
     else:

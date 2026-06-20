@@ -20,9 +20,14 @@ This license applies only to this file and does not override licenses of other f
 from __future__ import division
 import time
 import os
-import board
-import busio
-from adafruit_pca9685 import PCA9685
+try:
+    import board
+    import busio
+    from adafruit_pca9685 import PCA9685
+except Exception:
+    board = None
+    busio = None
+    PCA9685 = None
 
 from modules.module_messageQue import queue_message
 from modules.module_config import load_config
