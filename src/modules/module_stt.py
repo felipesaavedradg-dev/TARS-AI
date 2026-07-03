@@ -245,8 +245,16 @@ class STTManager:
 
     def _initialize_models(self):
         """Measure background noise and load the selected STT model."""
-        self._measure_background_noise()
         stt_proc = self.config.get("STT", {}).get("stt_processor", "fastrtc")
+        _LOCAL_STT = {"fastrtc", "silero", "sherpa-onnx"}
+        if stt_proc in _LOCAL_STT:
+            self._measure_background_noise()
+        else:
+            queue_message(f"INFO: Skipping mic calibration (stt_processor={stt_proc}, no local mic needed)")
+            self._no_mic = True
+            self.wake_silence_threshold = 100.0
+            self.silence_threshold = 100.0
+            self.silence_threshold_margin = 100.0
 
         loaders = {
             "fastrtc": self._load_fastrtc_model,
