@@ -175,6 +175,7 @@ class STTManager:
         self.wake_silence_threshold = None
         self.silence_threshold = None  # Updated after measuring background noise
         self.silence_threshold_margin = None
+        self._no_mic = False
         self.MAX_RECORDING_FRAMES = 100   # ~12.5 seconds
         self.MAX_SILENT_FRAMES = CONFIG['STT']['speechdelay']
 
@@ -244,8 +245,16 @@ class STTManager:
 
     def _initialize_models(self):
         """Measure background noise and load the selected STT model."""
-        self._measure_background_noise()
         stt_proc = self.config.get("STT", {}).get("stt_processor", "fastrtc")
+        _LOCAL_STT = {"fastrtc", "silero", "sherpa-onnx"}
+        if stt_proc in _LOCAL_STT:
+            self._measure_background_noise()
+        else:
+            queue_message(f"INFO: Skipping mic calibration (stt_processor={stt_proc}, no local mic needed)")
+            self._no_mic = True
+            self.wake_silence_threshold = 100.0
+            self.silence_threshold = 100.0
+            self.silence_threshold_margin = 100.0
 
         loaders = {
             "fastrtc": self._load_fastrtc_model,
@@ -722,6 +731,12 @@ class STTManager:
     _last_status_was_sleeping = False
 
     def _stt_processing_loop(self):
+        if self._no_mic:
+            queue_message("INFO: STT processing loop disabled (no local mic) — using browser/text input only.")
+            while self.running and not self.shutdown_event.is_set():
+                time.sleep(1)
+            return
+
         queue_message("INFO: Starting STT processing loop...")
         while self.running and not self.shutdown_event.is_set():
             # Skip processing if paused (e.g., during video playback)
@@ -1788,13 +1803,21 @@ class STTManager:
         queue_message("INFO: Measuring background noise...")
         rms_values = []
 
-        with ResamplingInputStream(dtype="int16") as mic:
-            for _ in range(20):
-                data, _ = mic.read(4000)
-                rms = self._compute_rms_fast(data)
-                if rms is not None:
-                    rms_values.append(rms)
-                time.sleep(0.1)
+        try:
+            with ResamplingInputStream(dtype="int16") as mic:
+                for _ in range(20):
+                    data, _ = mic.read(4000)
+                    rms = self._compute_rms_fast(data)
+                    if rms is not None:
+                        rms_values.append(rms)
+                    time.sleep(0.1)
+        except Exception as e:
+            queue_message(f"WARNING: No local microphone available, local listening disabled: {e}")
+            self._no_mic = True
+            self.wake_silence_threshold = 100.0
+            self.silence_threshold = 100.0
+            self.silence_threshold_margin = 100.0
+            return
 
         if rms_values:
             bg_rms = np.array(rms_values)
